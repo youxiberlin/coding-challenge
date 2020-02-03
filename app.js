@@ -1,17 +1,18 @@
-const Joi = require('joi');
 const mongoose = require('mongoose');
 const express = require('express');
 const bodyParser = require('body-parser');
+//TO-DO: delete 'util'
 const util = require('util');
+const validateData = require('./validator');
 
 const API_PORT = 3000;
 const app = express();
 const router = express.Router();
 
 const Data = mongoose.model('Data', new mongoose.Schema({
-	// todo Add requirement
-	id: { type: Number },
-	text: { type: String }
+	// To-Do Add requirement
+	key: { type: Number },
+	text: { type: String },
 }));
 
 const dbRoute = 'mongodb+srv://yuki:yuki@cluster0-xzvas.mongodb.net/test?retryWrites=true&w=majority';
@@ -23,26 +24,48 @@ mongoose.connect(dbRoute, {
 });
 
 let db = mongoose.connection;
+db.collection('Data').createIndex( { "lastModifiedDate": 1 }, { expireAfterSeconds: 3600 } )
 
 db.once('open', () => console.log('connected to the database'));
 db.on('error', console.error.bind(console, 'MongoDB connection error:'));
+
 app.use(bodyParser.urlencoded({
 	extended: true
 }));
 
-router.get('/', (req, res) => {
-	res.send('hello world')
+const makeRandomStr = () => Math.random().toString(36).substring(2);
+
+router.get('/', async (req, res) => {
+	const data = await Data.find().sort('key');
+	const keys = data.map(item => item.key);
+	res.send(keys)
 });
 
-router.get('/data/:id', (req, res) => {
-	res.send(req.params.id)
+router.get('/:key', async (req, res) => {
+	const data = await Data.find({ key: req.params.key });
+	// To-Do: Add error detail object
+	// if (key.length === 0) res.status(404).send('The data with the given key was not found');
+
+	if (data.length === 0) {
+		console.log('Cache miss');
+		const randomStr = makeRandomStr();
+		let newData = new Data({
+			key: Number(req.params.key),
+			text: randomStr,
+		})
+		newData = await newData.save();
+		res.send(newData);
+	} else {
+		console.log(`Cache hit! \n ${data}`);
+		res.send(data)
+	}
 });
 
 router.post('/', async (req, res) => {
 	const { error } = validateData(req.body); 
 	if (error) return res.status(400).send(error.details[0].message);
 	let data = new Data({
-		id: req.body.id,
+		key: req.body.key,
 		text: req.body.text,
 	})
 	data = await data.save();
@@ -51,12 +74,3 @@ router.post('/', async (req, res) => {
 
 app.use('/api/data', router);
 app.listen(API_PORT, () => console.log(`LISTENING ON PORT ${API_PORT}`));
-
-function validateData(data) {
-	const schema = {
-		text: Joi.string().min(1).required(),
-		id: Joi.number(),
-	};
-
-	return Joi.validate(data, schema);
-}
