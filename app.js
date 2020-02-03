@@ -53,8 +53,8 @@ router.post('/', async (req, res) => {
 	// The first condition is to check if the max number of cached item is reached
 	// If it is reached, it finds the oldest entry in the current collection by sorting by timemstamp and gettint the oldest one
 	// Then, it replace the oldest one and the newly posted one
-	const data = await Data.find().sort('key');
-	if (data.length === maxNumOfCachedItems){
+	const allData = await Data.find().sort('key');
+	if (allData.length === maxNumOfCachedItems){
 		const currentDataArr = await Data.find().sort('key');
 		const oldestData = currentDataArr.sort((a, b) => a.createAt - b.createAt)[0];
 		const newData = new Data({
